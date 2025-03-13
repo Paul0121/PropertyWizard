@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 def authenticate_gmail():
-    """Authenticate with Gmail API using a verification code."""
+    """Authenticate with Gmail API using manual code entry."""
     creds = None
 
     # Load credentials from Streamlit Secrets
@@ -28,17 +28,32 @@ def authenticate_gmail():
     with open("temp_credentials.json", "w") as f:
         json.dump(credentials_json, f)
 
-    # Authenticate using manual verification code
+    # Start authentication flow
     flow = InstalledAppFlow.from_client_secrets_file("temp_credentials.json", SCOPES)
-    creds = flow.run_console()  # Uses a console-based authentication method
+    auth_url, _ = flow.authorization_url(prompt="consent")
 
-    # Save the credentials
-    with open("token.pickle", "wb") as token:
-        pickle.dump(creds, token)
+    # Show login link in Streamlit
+    st.write("**Click the link below to authenticate:**")
+    st.markdown(f"[Authenticate with Google]({auth_url})", unsafe_allow_html=True)
 
-    os.remove("temp_credentials.json")  # Remove temp file for security
+    # Ask user for authorization code
+    auth_code = st.text_input("Enter the authorization code here:")
 
-    return creds
+    if auth_code:
+        # Fetch credentials using the entered authorization code
+        flow.fetch_token(code=auth_code)
+        creds = flow.credentials
+
+        # Save credentials
+        with open("token.pickle", "wb") as token:
+            pickle.dump(creds, token)
+
+        os.remove("temp_credentials.json")  # Remove temp file for security
+        st.success("Authentication successful! Token saved.")
+
+        return creds
+
+    return None
 
 # Streamlit UI
 st.title("Gmail Authentication for Property Emails")
@@ -46,6 +61,6 @@ st.title("Gmail Authentication for Property Emails")
 if st.button("Authenticate Gmail"):
     creds = authenticate_gmail()
     if creds:
-        st.success("Authentication successful! Token saved.")
+        st.success("You're authenticated!")
     else:
-        st.error("Authentication failed. Please try again.")
+        st.warning("Please enter the authorization code after clicking the link.")
