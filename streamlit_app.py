@@ -8,10 +8,10 @@ from googleapiclient.discovery import build
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 def authenticate_gmail():
-    """Authenticate with Gmail API and save the access token."""
+    """Authenticate with Gmail API using a verification code."""
     creds = None
 
-    # Load credentials from Streamlit Secrets and format properly
+    # Load credentials from Streamlit Secrets
     credentials_json = {
         "installed": {
             "client_id": st.secrets["gmail"]["client_id"],
@@ -20,7 +20,7 @@ def authenticate_gmail():
             "token_uri": st.secrets["gmail"]["token_uri"],
             "auth_provider_x509_cert_url": st.secrets["gmail"]["auth_provider_x509_cert_url"],
             "client_secret": st.secrets["gmail"]["client_secret"],
-            "redirect_uris": [st.secrets["gmail"]["redirect_uris"]]  # Ensure it's a list
+            "redirect_uris": [st.secrets["gmail"]["redirect_uris"]]
         }
     }
 
@@ -28,11 +28,11 @@ def authenticate_gmail():
     with open("temp_credentials.json", "w") as f:
         json.dump(credentials_json, f)
 
-    # Authenticate
+    # Authenticate using manual verification code
     flow = InstalledAppFlow.from_client_secrets_file("temp_credentials.json", SCOPES)
-    creds = flow.run_local_server(port=8501)
+    creds = flow.run_console()  # Uses a console-based authentication method
 
-    # Save the credentials to a token file
+    # Save the credentials
     with open("token.pickle", "wb") as token:
         pickle.dump(creds, token)
 
