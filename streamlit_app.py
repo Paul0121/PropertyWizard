@@ -67,3 +67,8 @@ if st.button("Authenticate Gmail"):
         st.success("🎉 You're authenticated!")
     else:
         st.warning("⚠️ Please
+
+                   if __name__ == "__main__":
+    import os
+    os.system("streamlit run streamlit_app.py")
+
