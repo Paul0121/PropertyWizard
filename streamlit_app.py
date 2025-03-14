@@ -1,67 +1,66 @@
 import streamlit as st
-from google.oauth2.service_account import Credentials
+import pickle
+import os
+import json
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
 def authenticate_gmail():
-    """Authenticate with Gmail API using a Service Account."""
-    creds = Credentials.from_service_account_info(st.secrets["gmail"])
-    try:
-        service = build("gmail", "v1", credentials=creds)
-        st.success("✅ Authentication successful! Gmail API is ready.")
-        return service
-    except Exception as e:
-        st.error(f"❌ Authentication failed: {str(e)}")
-        return None
+    """Authenticate using OAuth for personal Gmail accounts."""
+    creds = None
 
-# Authenticate and get the Gmail service
-service = authenticate_gmail()
+    # Load credentials from Streamlit secrets
+    credentials_json = {
+        "installed": {
+            "client_id": st.secrets["gmail"]["client_id"],
+            "client_secret": st.secrets["gmail"]["client_secret"],
+            "auth_uri": st.secrets["gmail"]["auth_uri"],
+            "token_uri": st.secrets["gmail"]["token_uri"],
+            "redirect_uris": st.secrets["gmail"]["redirect_uris"]
+        }
+    }
 
-def get_latest_emails(service, query=""):
-    """Fetch the latest emails matching the query."""
-    if not service:
-        st.error("⚠️ Gmail service is not available. Please authenticate first.")
-        return []
+    # Save credentials to a temporary file
+    with open("temp_credentials.json", "w") as f:
+        json.dump(credentials_json, f)
 
-    try:
-        results = service.users().messages().list(userId="me", q=query, maxResults=5).execute()
-        messages = results.get("messages", [])
+    # Start authentication flow
+    flow = InstalledAppFlow.from_client_secrets_file("temp_credentials.json", SCOPES)
+    auth_url, _ = flow.authorization_url(prompt="consent")
 
-        if not messages:
-            st.warning("No emails found matching your query.")
-            return []
+    # Show login link in Streamlit
+    st.write("### Step 1: Click the link below to authenticate:")
+    st.markdown(f"[Authenticate with Google]({auth_url})", unsafe_allow_html=True)
 
-        email_data = []
-        for msg in messages:
-            msg_data = service.users().messages().get(userId="me", id=msg["id"]).execute()
-            headers = msg_data["payload"]["headers"]
+    # Step 2: Enter the authorization code
+    auth_code = st.text_input("### Step 2: Paste the authorization code here:")
 
-            # Extract subject and sender
-            subject = next((h["value"] for h in headers if h["name"] == "Subject"), "No Subject")
-            sender = next((h["value"] for h in headers if h["name"] == "From"), "Unknown Sender")
-            
-            # Extract email body
-            body = msg_data["snippet"]  # Snippet gives a short preview
+    if auth_code:
+        try:
+            # Fetch credentials using the entered authorization code
+            flow.fetch_token(code=auth_code)
+            creds = flow.credentials
 
-            email_data.append({"sender": sender, "subject": subject, "body": body})
+            # Save credentials for future use
+            with open("token.pickle", "wb") as token:
+                pickle.dump(creds, token)
 
-        return email_data
+            os.remove("temp_credentials.json")  # Remove temp file for security
+            st.success("✅ Authentication successful! Token saved.")
+            return creds
+        except Exception as e:
+            st.error(f"❌ Authentication failed: {str(e)}")
+    
+    return None
 
-    except Exception as e:
-        st.error(f"Error fetching emails: {str(e)}")
-        return []
+# Streamlit UI
+st.title("Gmail Authentication for Personal Accounts")
 
-# Streamlit UI to Fetch Emails
-st.header("📬 Fetch Latest Property Emails")
-
-if st.button("Get Latest Emails"):
-    if service:
-        emails = get_latest_emails(service, query="real estate deal OR property listing")
-        if emails:
-            for email in emails:
-                st.subheader(f"📧 {email['subject']}")
-                st.write(f"**From:** {email['sender']}")
-                st.write(f"**Preview:** {email['body']}")
-        else:
-            st.warning("No relevant emails found.")
+if st.button("Authenticate Gmail"):
+    creds = authenticate_gmail()
+    if creds:
+        st.success("🎉 You're authenticated!")
     else:
-        st.error("⚠️ Authentication failed. Please refresh the app and try again.")
+        st.warning("⚠️ Please enter the authorization code after clicking the link.")
