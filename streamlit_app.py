@@ -5,7 +5,6 @@ from googleapiclient.discovery import build
 def authenticate_gmail():
     """Authenticate with Gmail API using a Service Account."""
     creds = Credentials.from_service_account_info(st.secrets["gmail"])
-
     try:
         service = build("gmail", "v1", credentials=creds)
         st.success("✅ Authentication successful! Gmail API is ready.")
@@ -14,17 +13,15 @@ def authenticate_gmail():
         st.error(f"❌ Authentication failed: {str(e)}")
         return None
 
-# Streamlit UI
-st.title("Gmail API Authentication (Service Account)")
+# Authenticate and get the Gmail service
+service = authenticate_gmail()
 
-if st.button("Connect to Gmail"):
-    service = authenticate_gmail()
-    if service:
-        st.success("🎉 You're authenticated!")
-    else:
-        st.warning("⚠️ Failed to authenticate.")
 def get_latest_emails(service, query=""):
     """Fetch the latest emails matching the query."""
+    if not service:
+        st.error("⚠️ Gmail service is not available. Please authenticate first.")
+        return []
+
     try:
         results = service.users().messages().list(userId="me", q=query, maxResults=5).execute()
         messages = results.get("messages", [])
@@ -57,12 +54,14 @@ def get_latest_emails(service, query=""):
 st.header("📬 Fetch Latest Property Emails")
 
 if st.button("Get Latest Emails"):
-    emails = get_latest_emails(service, query="real estate deal OR property listing")
-    
-    if emails:
-        for email in emails:
-            st.subheader(f"📧 {email['subject']}")
-            st.write(f"**From:** {email['sender']}")
-            st.write(f"**Preview:** {email['body']}")
+    if service:
+        emails = get_latest_emails(service, query="real estate deal OR property listing")
+        if emails:
+            for email in emails:
+                st.subheader(f"📧 {email['subject']}")
+                st.write(f"**From:** {email['sender']}")
+                st.write(f"**Preview:** {email['body']}")
+        else:
+            st.warning("No relevant emails found.")
     else:
-        st.warning("No relevant emails found.")
+        st.error("⚠️ Authentication failed. Please refresh the app and try again.")
