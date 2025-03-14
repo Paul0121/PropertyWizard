@@ -23,3 +23,46 @@ if st.button("Connect to Gmail"):
         st.success("🎉 You're authenticated!")
     else:
         st.warning("⚠️ Failed to authenticate.")
+def get_latest_emails(service, query=""):
+    """Fetch the latest emails matching the query."""
+    try:
+        results = service.users().messages().list(userId="me", q=query, maxResults=5).execute()
+        messages = results.get("messages", [])
+
+        if not messages:
+            st.warning("No emails found matching your query.")
+            return []
+
+        email_data = []
+        for msg in messages:
+            msg_data = service.users().messages().get(userId="me", id=msg["id"]).execute()
+            headers = msg_data["payload"]["headers"]
+
+            # Extract subject and sender
+            subject = next((h["value"] for h in headers if h["name"] == "Subject"), "No Subject")
+            sender = next((h["value"] for h in headers if h["name"] == "From"), "Unknown Sender")
+            
+            # Extract email body
+            body = msg_data["snippet"]  # Snippet gives a short preview
+
+            email_data.append({"sender": sender, "subject": subject, "body": body})
+
+        return email_data
+
+    except Exception as e:
+        st.error(f"Error fetching emails: {str(e)}")
+        return []
+
+# Streamlit UI to Fetch Emails
+st.header("📬 Fetch Latest Property Emails")
+
+if st.button("Get Latest Emails"):
+    emails = get_latest_emails(service, query="real estate deal OR property listing")
+    
+    if emails:
+        for email in emails:
+            st.subheader(f"📧 {email['subject']}")
+            st.write(f"**From:** {email['sender']}")
+            st.write(f"**Preview:** {email['body']}")
+    else:
+        st.warning("No relevant emails found.")
