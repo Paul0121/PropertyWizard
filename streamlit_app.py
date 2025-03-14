@@ -1,14 +1,5 @@
-import streamlit as st
-import pickle
-import os
-import json
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-
-SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
-
 def authenticate_gmail():
-    """Authenticate with Gmail API using manual code entry."""
+    """Authenticate with Gmail API using a local server flow."""
     creds = None
 
     # Load credentials from Streamlit Secrets
@@ -30,19 +21,9 @@ def authenticate_gmail():
 
     # Start authentication flow
     flow = InstalledAppFlow.from_client_secrets_file("temp_credentials.json", SCOPES)
-    auth_url, _ = flow.authorization_url(prompt="consent")
 
-    # Show login link in Streamlit
-    st.write("**Click the link below to authenticate:**")
-    st.markdown(f"[Authenticate with Google]({auth_url})", unsafe_allow_html=True)
-
-    # Ask user for authorization code
-    auth_code = st.text_input("Enter the authorization code here:")
-
-    if auth_code:
-        # Fetch credentials using the entered authorization code
-        flow.fetch_token(code=auth_code)
-        creds = flow.credentials
+    try:
+        creds = flow.run_local_server(port=0)  # Open browser and authenticate
 
         # Save credentials
         with open("token.pickle", "wb") as token:
@@ -53,14 +34,7 @@ def authenticate_gmail():
 
         return creds
 
+    except Exception as e:
+        st.error(f"Authentication failed: {str(e)}")
+
     return None
-
-# Streamlit UI
-st.title("Gmail Authentication for Property Emails")
-
-if st.button("Authenticate Gmail"):
-    creds = authenticate_gmail()
-    if creds:
-        st.success("You're authenticated!")
-    else:
-        st.warning("Please enter the authorization code after clicking the link.")
