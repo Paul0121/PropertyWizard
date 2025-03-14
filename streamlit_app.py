@@ -66,7 +66,8 @@ if st.button("Authenticate Gmail"):
     if creds:
         st.success("🎉 You're authenticated!")
     else:
-        st.warning("⚠️ Please
+        st.warning("⚠️ Please enter the authorization code after clicking the link.")
+
 
                    if __name__ == "__main__":
     import os
