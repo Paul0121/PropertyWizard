@@ -68,8 +68,6 @@ if st.button("Authenticate Gmail"):
     else:
         st.warning("⚠️ Please enter the authorization code after clicking the link.")
 
-
-                   if __name__ == "__main__":
+if __name__ == "__main__":
     import os
     os.system("streamlit run streamlit_app.py")
-
