@@ -1,11 +1,16 @@
 import streamlit as st
+import requests
+import re
+import numpy as np
+from base64 import urlsafe_b64decode
+import email
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
+# ------------------------ AUTHENTICATION ------------------------
 def authenticate_gmail():
     """Authenticate with Gmail API using a Service Account."""
     creds = Credentials.from_service_account_info(st.secrets["gmail"])
-
     try:
         service = build("gmail", "v1", credentials=creds)
         st.success("✅ Authentication successful! Gmail API is ready.")
@@ -14,58 +19,7 @@ def authenticate_gmail():
         st.error(f"❌ Authentication failed: {str(e)}")
         return None
 
-# Streamlit UI
-st.title("Gmail API Authentication (Service Account)")
-
-if st.button("Connect to Gmail"):
-    service = authenticate_gmail()
-    if service:
-        st.success("🎉 You're authenticated!")
-    else:
-        st.warning("⚠️ Failed to authenticate.")
-import requests
-import numpy as np
-
-def fetch_comps(address, bedrooms, bathrooms):
-    """Fetch comparable properties from Zillow/Redfin (scraping or API)."""
-    
-    # Replace this with your actual Zillow scraper function
-    zillow_url = f"https://www.zillow.com/homes/{address.replace(' ', '-')}_rb/"
-    response = requests.get(zillow_url)
-    
-    if response.status_code == 200:
-        # Extract comparable properties (this part depends on your scraper)
-        comps = extract_comps(response.text)
-        
-        # Compute ARV using average price per square foot
-        arv = np.mean([comp["price_per_sqft"] * comp["sqft"] for comp in comps])
-        
-        return comps, arv
-    else:
-        return None, None
-
-def calculate_mao(arv, repair_costs=30000):
-    """Calculate the Max Allowable Offer using the 60% ARV formula."""
-    return (arv * 0.6) - repair_costs
-
-# Example Usage:
-address = "2313 W Saint Isabel St"
-bedrooms = 3
-bathrooms = 2
-
-comps, arv = fetch_comps(address, bedrooms, bathrooms)
-if comps:
-    mao = calculate_mao(arv)
-    print(f"ARV: ${arv:,.2f}, MAO: ${mao:,.2f}")
-    print(f"Comparable Properties: {comps}")
-else:
-    print("No comps found.")
-
-import re
-from googleapiclient.discovery import build
-from base64 import urlsafe_b64decode
-import email
-
+# ------------------------ FETCH UNREAD EMAILS ------------------------
 def get_unread_emails(service, max_results=5):
     """Fetch unread emails from Gmail."""
     try:
@@ -73,7 +27,7 @@ def get_unread_emails(service, max_results=5):
         messages = results.get("messages", [])
         return messages
     except Exception as e:
-        print(f"Error fetching emails: {e}")
+        st.error(f"Error fetching emails: {e}")
         return []
 
 def extract_email_body(service, message_id):
@@ -90,13 +44,14 @@ def extract_email_body(service, message_id):
         else:
             return msg.get_payload(decode=True).decode()
     except Exception as e:
-        print(f"Error extracting email body: {e}")
+        st.error(f"Error extracting email body: {e}")
         return None
 
+# ------------------------ EXTRACT PROPERTY DETAILS ------------------------
 def extract_property_details(email_body):
     """Extract address, bedrooms, and bathrooms from email content using regex."""
-    address_pattern = r"\d{1,5}\s[\w\s]+,\s\w{2}\s\d{5}"  # Matches "123 Main St, FL 33701"
-    bed_bath_pattern = r"(\d+)\s*(?:bed|br).*?(\d+)\s*(?:bath|ba)"  # Matches "3 bed 2 bath" or "3br 2ba"
+    address_pattern = r"\d{1,5}\s[\w\s]+,\s\w{2}\s\d{5}"  # Example: "123 Main St, FL 33701"
+    bed_bath_pattern = r"(\d+)\s*(?:bed|br).*?(\d+)\s*(?:bath|ba)"  # Example: "3 bed 2 bath"
 
     address_match = re.search(address_pattern, email_body)
     bed_bath_match = re.search(bed_bath_pattern, email_body, re.IGNORECASE)
@@ -107,8 +62,28 @@ def extract_property_details(email_body):
 
     return address, bedrooms, bathrooms
 
-# Example usage
+# ------------------------ FETCH COMPS & CALCULATE MAO ------------------------
+def fetch_comps(address, bedrooms, bathrooms):
+    """Fetch comparable properties from Zillow/Redfin (scraping or API)."""
+    zillow_url = f"https://www.zillow.com/homes/{address.replace(' ', '-')}_rb/"
+    response = requests.get(zillow_url)
+
+    if response.status_code == 200:
+        # Extract comparable properties (this part depends on your scraper)
+        comps = extract_comps(response.text)  # Implement extract_comps()
+        
+        if comps:
+            arv = np.mean([comp["price_per_sqft"] * comp["sqft"] for comp in comps])
+            return comps, arv
+    return None, None
+
+def calculate_mao(arv, repair_costs=30000):
+    """Calculate the Max Allowable Offer using the 60% ARV formula."""
+    return (arv * 0.6) - repair_costs
+
+# ------------------------ PROCESS EMAILS ------------------------
 def process_emails(service):
+    """Fetch unread emails, extract property details, run comps, and send results."""
     messages = get_unread_emails(service)
 
     for msg in messages:
@@ -116,9 +91,45 @@ def process_emails(service):
         if email_body:
             address, bedrooms, bathrooms = extract_property_details(email_body)
             if address and bedrooms and bathrooms:
-                print(f"Extracted: {address}, {bedrooms} beds, {bathrooms} baths")
-                return address, bedrooms, bathrooms
+                st.write(f"Extracted: {address}, {bedrooms} beds, {bathrooms} baths")
+                
+                comps, arv = fetch_comps(address, bedrooms, bathrooms)
+                if comps:
+                    mao = calculate_mao(arv)
+                    send_email_with_results(service, address, comps, mao)
+                    st.success(f"✅ Property meets criteria! Email sent with MAO: ${mao:,.2f}")
+                else:
+                    mark_email_as_read(service, msg["id"])
+                    st.warning(f"⚠️ No comps found for {address}. Email marked as read.")
             else:
-                print("No property details found in this email.")
+                st.warning("⚠️ No property details found in this email.")
 
-    return None, None, None
+# ------------------------ SEND EMAIL WITH RESULTS ------------------------
+def send_email_with_results(service, address, comps, mao):
+    """Send an email with the comps and MAO calculation."""
+    subject = f"Property Analysis: {address}"
+    body = f"Comparable Properties:\n{comps}\n\nMAO: ${mao:,.2f}"
+    
+    message = f"Subject: {subject}\n\n{body}"
+    
+    # Send email (this part depends on how you send emails via Gmail API)
+    print("🚀 Email sent!")  # Replace with actual send logic
+
+# ------------------------ MARK EMAIL AS READ ------------------------
+def mark_email_as_read(service, message_id):
+    """Mark an email as read if it does not meet criteria."""
+    try:
+        service.users().messages().modify(userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}).execute()
+        st.info("📩 Email marked as read.")
+    except Exception as e:
+        st.error(f"Error marking email as read: {e}")
+
+# ------------------------ STREAMLIT UI ------------------------
+st.title("Automated Property Comps System")
+
+if st.button("Run Email Processing"):
+    service = authenticate_gmail()
+    if service:
+        process_emails(service)
+    else:
+        st.warning("⚠️ Authentication failed.")
