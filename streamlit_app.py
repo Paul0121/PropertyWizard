@@ -7,22 +7,28 @@ from base64 import urlsafe_b64decode
 import email
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+import json
 
 # ------------------------ AUTHENTICATION ------------------------
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 def authenticate_gmail():
-    """Authenticate with OAuth 2.0 for Gmail API."""
-    json_path = "credentials.json"  # Ensure this file is in the same directory
+    """Authenticate with OAuth 2.0 using Streamlit secrets."""
+    credentials = {
+        "installed": {
+            "client_id": st.secrets["gmail"]["client_id"],
+            "client_secret": st.secrets["gmail"]["client_secret"],
+            "token_uri": st.secrets["gmail"]["token_uri"],
+            "auth_uri": st.secrets["gmail"]["auth_uri"],
+            "auth_provider_x509_cert_url": st.secrets["gmail"]["auth_provider_x509_cert_url"],
+            "redirect_uris": json.loads(st.secrets["gmail"]["redirect_uris"])
+        }
+    }
 
-    if not os.path.exists(json_path):
-        st.error("⚠️ Credentials file not found. Please upload the correct JSON file.")
-        return None
-
-    flow = InstalledAppFlow.from_client_secrets_file(json_path, SCOPES)
+    flow = InstalledAppFlow.from_client_config(credentials, SCOPES)
     creds = flow.run_local_server(port=0)
     service = build("gmail", "v1", credentials=creds)
-    
+
     st.success("✅ Authentication successful! Gmail API is ready.")
     return service
 
