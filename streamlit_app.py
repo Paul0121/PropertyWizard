@@ -60,3 +60,65 @@ if comps:
     print(f"Comparable Properties: {comps}")
 else:
     print("No comps found.")
+
+import re
+from googleapiclient.discovery import build
+from base64 import urlsafe_b64decode
+import email
+
+def get_unread_emails(service, max_results=5):
+    """Fetch unread emails from Gmail."""
+    try:
+        results = service.users().messages().list(userId="me", labelIds=["INBOX"], q="is:unread", maxResults=max_results).execute()
+        messages = results.get("messages", [])
+        return messages
+    except Exception as e:
+        print(f"Error fetching emails: {e}")
+        return []
+
+def extract_email_body(service, message_id):
+    """Extract the plain text body from an email."""
+    try:
+        message = service.users().messages().get(userId="me", id=message_id, format="raw").execute()
+        msg_str = urlsafe_b64decode(message["raw"]).decode("utf-8")
+        msg = email.message_from_string(msg_str)
+
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == "text/plain":
+                    return part.get_payload(decode=True).decode()
+        else:
+            return msg.get_payload(decode=True).decode()
+    except Exception as e:
+        print(f"Error extracting email body: {e}")
+        return None
+
+def extract_property_details(email_body):
+    """Extract address, bedrooms, and bathrooms from email content using regex."""
+    address_pattern = r"\d{1,5}\s[\w\s]+,\s\w{2}\s\d{5}"  # Matches "123 Main St, FL 33701"
+    bed_bath_pattern = r"(\d+)\s*(?:bed|br).*?(\d+)\s*(?:bath|ba)"  # Matches "3 bed 2 bath" or "3br 2ba"
+
+    address_match = re.search(address_pattern, email_body)
+    bed_bath_match = re.search(bed_bath_pattern, email_body, re.IGNORECASE)
+
+    address = address_match.group(0) if address_match else None
+    bedrooms = int(bed_bath_match.group(1)) if bed_bath_match else None
+    bathrooms = int(bed_bath_match.group(2)) if bed_bath_match else None
+
+    return address, bedrooms, bathrooms
+
+# Example usage
+def process_emails(service):
+    messages = get_unread_emails(service)
+
+    for msg in messages:
+        email_body = extract_email_body(service, msg["id"])
+        if email_body:
+            address, bedrooms, bathrooms = extract_property_details(email_body)
+            if address and bedrooms and bathrooms:
+                print(f"Extracted: {address}, {bedrooms} beds, {bathrooms} baths")
+                return address, bedrooms, bathrooms
+            else:
+                print("No property details found in this email.")
+
+    return None, None, None
