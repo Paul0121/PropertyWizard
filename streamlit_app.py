@@ -2,22 +2,29 @@ import streamlit as st
 import requests
 import re
 import numpy as np
+import os
 from base64 import urlsafe_b64decode
 import email
-from google.oauth2.service_account import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 # ------------------------ AUTHENTICATION ------------------------
+SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+
 def authenticate_gmail():
-    """Authenticate with Gmail API using a Service Account."""
-    creds = Credentials.from_service_account_info(st.secrets["gmail"])
-    try:
-        service = build("gmail", "v1", credentials=creds)
-        st.success("✅ Authentication successful! Gmail API is ready.")
-        return service
-    except Exception as e:
-        st.error(f"❌ Authentication failed: {str(e)}")
+    """Authenticate with OAuth 2.0 for Gmail API."""
+    json_path = "credentials.json"  # Ensure this file is in the same directory
+
+    if not os.path.exists(json_path):
+        st.error("⚠️ Credentials file not found. Please upload the correct JSON file.")
         return None
+
+    flow = InstalledAppFlow.from_client_secrets_file(json_path, SCOPES)
+    creds = flow.run_local_server(port=0)
+    service = build("gmail", "v1", credentials=creds)
+    
+    st.success("✅ Authentication successful! Gmail API is ready.")
+    return service
 
 # ------------------------ FETCH UNREAD EMAILS ------------------------
 def get_unread_emails(service, max_results=5):
