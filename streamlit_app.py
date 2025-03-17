@@ -9,7 +9,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 import json
 
-# ------------------------ AUTHENTICATION ------------------------
+
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 def authenticate_gmail():
@@ -32,7 +32,7 @@ def authenticate_gmail():
     st.success("✅ Authentication successful! Gmail API is ready.")
     return service
 
-# ------------------------ FETCH UNREAD EMAILS ------------------------
+
 def get_unread_emails(service, max_results=5):
     """Fetch unread emails from Gmail."""
     try:
